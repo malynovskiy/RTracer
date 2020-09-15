@@ -1,3 +1,11 @@
+#include <vector>
+#include <fstream>
+#include "geometry.h"
+#include <cmath>
+#include <chrono>
+#include <iostream>
+#include "stb_image_write.h"
+
 namespace RayTracer
 {
 #define M_PI 3.14159265358979323846
@@ -9,6 +17,33 @@ constexpr unsigned numberOfChannels = 3;
 constexpr float fov = M_PI / 3.0;
 
 const math::Vec3f backgroundColor = math::Vec3f(0.2f, 0.7f, 0.87f);
+
+void writeIntoJPG(const char *fileName,
+  const std::vector<math::Vec3f> &framebuffer,
+  const unsigned width,
+  const unsigned height,
+  const unsigned numberOfChannels)
+{
+  auto t_start = std::chrono::high_resolution_clock().now();
+  std::vector<unsigned char> buffer(width * height * numberOfChannels);
+
+  const unsigned int size = framebuffer.size();
+
+  for (int i = 0, j = 0; i < size; ++i)
+  {
+    buffer[j++] = static_cast<unsigned char>(255 * std::max(0.0f, std::min(1.0f, framebuffer[i].x)));
+    buffer[j++] = static_cast<unsigned char>(255 * std::max(0.0f, std::min(1.0f, framebuffer[i].y)));
+    buffer[j++] = static_cast<unsigned char>(255 * std::max(0.0f, std::min(1.0f, framebuffer[i].z)));
+  }
+
+  stbi_write_jpg(fileName, width, height, numberOfChannels, buffer.data(), 100);
+
+  auto t_now = std::chrono::high_resolution_clock::now();
+  std::cout << "Time spended on -> "
+            << " Writing into a file : "
+            << std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count() << '\n';
+}
+
 struct Material
 {
   Material() : diffuse_color(), albedo(1, 0), specular_exponent() {}
