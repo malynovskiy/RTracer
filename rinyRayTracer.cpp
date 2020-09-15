@@ -21,6 +21,14 @@ struct Material
   math::Vec2f albedo;
   float specular_exponent;
 };
+struct LightSource
+{
+  LightSource(const math::Vec3f &Position, const float &Intensity) : position(Position), intensity(Intensity) {}
+
+  math::Vec3f position;
+  float intensity;
+};
+
 struct Sphere
 {
   math::Vec3f center;
