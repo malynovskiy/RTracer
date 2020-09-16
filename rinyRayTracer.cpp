@@ -57,6 +57,27 @@ struct Material
   float specular_exponent;
 };
 
+math::Vec3f refract(const math::Vec3f &direction, const math::Vec3f &normal, const float &refractive_index)
+{
+  // cosine of insidence angle
+  float cosi = -std::max(-1.0f, std::min(1.0f, direction * normal));
+  float etai = 1;
+  float etat = refractive_index;
+
+  math::Vec3f n = normal;
+  if (cosi < 0)
+  {
+    cosi = -cosi;
+    std::swap(etai, etat);
+    n = -normal;
+  }
+
+  float eta = etai / etat;
+  float k = 1.0f - eta * eta * (1.0f - cosi * cosi);
+
+  return k < 0 ? math::Vec3f(0.0f, 0.0f, 0.0f) : direction * eta + n * (eta * cosi - sqrt(k));
+}
+
 math::Vec3f reflect(const math::Vec3f &direction, const math::Vec3f &normal)
 {
   return direction - normal * 2.0f * (direction * normal);
