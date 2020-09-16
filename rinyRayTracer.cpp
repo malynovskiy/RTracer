@@ -46,14 +46,14 @@ void writeIntoJPG(const char *fileName,
 
 struct Material
 {
-  Material() : diffuse_color(), albedo(1, 0), specular_exponent() {}
-  Material(const math::Vec3f &Color, const math::Vec2f &Albedo, const float &Specular)
+  Material() : diffuse_color(), albedo(1.0f, 0.0f, 0.0f), specular_exponent() {}
+  Material(const math::Vec3f &Color, const math::Vec3f &Albedo, const float &Specular)
     : diffuse_color(Color), albedo(Albedo), specular_exponent(Specular)
   {
   }
 
   math::Vec3f diffuse_color;
-  math::Vec2f albedo;
+  math::Vec3f albedo;
   float specular_exponent;
 };
 
@@ -134,14 +134,19 @@ bool scene_intersect(const math::Vec3f &origin,
 math::Vec3f cast_ray(const math::Vec3f &origin,
   const math::Vec3f &direction,
   const std::vector<Sphere> &spheres,
-  const std::vector<LightSource> &lightSources)
+  const std::vector<LightSource> &lightSources,
+  size_t depth = 0)
 {
   using math::Vec3f;
   // intersection point and normal in that point
   Vec3f point, normal;
   Material material;
 
-  if (!scene_intersect(origin, direction, spheres, point, normal, material)) return backgroundColor;
+  if (depth > 4 || !scene_intersect(origin, direction, spheres, point, normal, material)) return backgroundColor;
+
+  Vec3f reflect_dir = reflect(direction, normal).normalize();
+  Vec3f reflect_origin = reflect_dir * normal < 0 ? point - normal * 1e-3 : point + normal * 1e-3;
+  Vec3f reflect_color = cast_ray(reflect_origin, reflect_dir, spheres, lightSources, depth + 1);
 
   float diffuse_light_intensity{}, specular_light_intensity{};
   for (const auto &lightSrc : lightSources)
@@ -163,7 +168,7 @@ math::Vec3f cast_ray(const math::Vec3f &origin,
       powf(std::max(0.0f, reflect(light_dir, normal) * direction), material.specular_exponent) * lightSrc.intensity;
   }
   return material.diffuse_color * diffuse_light_intensity * material.albedo[0]
-         + Vec3f(1.0f, 1.0f, 1.0f) * specular_light_intensity * material.albedo[1];
+         + Vec3f(1.0f, 1.0f, 1.0f) * specular_light_intensity * material.albedo[1] + reflect_color * material.albedo[2];
 }
 
 void render(const std::vector<Sphere> &spheres, const std::vector<LightSource> &lightSources)
@@ -204,14 +209,15 @@ int main(int argc, char *argv[])
   using namespace RayTracer;
   using namespace math;
 
-  Material ivory(Vec3f(0.4f, 0.4f, 0.3f), Vec2f(0.6f, 0.3f), 50.0f);
-  Material red_rubber(Vec3f(0.3f, 0.1f, 0.1f), Vec2f(0.9f, 0.1f), 10.0f);
+  Material ivory(Vec3f(0.4f, 0.4f, 0.3f), Vec3f(0.6f, 0.3f, 0.1f), 50.0f);
+  Material red_rubber(Vec3f(0.3f, 0.1f, 0.1f), Vec3f(0.9f, 0.1f, 0.0f), 10.0f);
+  Material mirror(Vec3f(1.0f, 1.0f, 1.0f), Vec3f(0.0f, 10.0f, 0.8f), 1425.0f);
 
   std::vector<Sphere> spheres;
   spheres.push_back(Sphere(Vec3f(-3, 0, -16), 2, ivory));
-  spheres.push_back(Sphere(Vec3f(-1.0, -1.5, -12), 2, red_rubber));
+  spheres.push_back(Sphere(Vec3f(-1.0, -1.5, -12), 2, mirror));
   spheres.push_back(Sphere(Vec3f(1.5, -0.5, -18), 3, red_rubber));
-  spheres.push_back(Sphere(Vec3f(7, 5, -18), 4, ivory));
+  spheres.push_back(Sphere(Vec3f(7, 5, -18), 4, mirror));
 
   std::vector<LightSource> lightSources;
   lightSources.push_back(LightSource(Vec3f(-20.0f, 20.0f, 20.0f), 1.5f));
