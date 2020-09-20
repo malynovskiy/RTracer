@@ -46,15 +46,16 @@ void writeIntoJPG(const char *fileName,
 
 struct Material
 {
-  Material() : diffuse_color(), albedo(1.0f, 0.0f, 0.0f), specular_exponent() {}
-  Material(const math::Vec3f &Color, const math::Vec3f &Albedo, const float &Specular)
-    : diffuse_color(Color), albedo(Albedo), specular_exponent(Specular)
+  Material() : diffuse_color(), albedo(1.0f, 0.0f, 0.0f, 0.0f), specular_exponent(), refractive_index(1) {}
+  Material(const math::Vec3f &Color, const math::Vec4f &Albedo, const float &Specular, const float &Refractive_index)
+    : diffuse_color(Color), albedo(Albedo), specular_exponent(Specular), refractive_index(Refractive_index)
   {
   }
 
   math::Vec3f diffuse_color;
-  math::Vec3f albedo;
+  math::Vec4f albedo;
   float specular_exponent;
+  float refractive_index;
 };
 
 math::Vec3f refract(const math::Vec3f &direction, const math::Vec3f &normal, const float &refractive_index)
@@ -75,7 +76,7 @@ math::Vec3f refract(const math::Vec3f &direction, const math::Vec3f &normal, con
   float eta = etai / etat;
   float k = 1.0f - eta * eta * (1.0f - cosi * cosi);
 
-  return k < 0 ? math::Vec3f(0.0f, 0.0f, 0.0f) : direction * eta + n * (eta * cosi - sqrt(k));
+  return k < 0 ? math::Vec3f(0.0f, 0.0f, 0.0f) : direction * eta + n * (eta * cosi - sqrtf(k));
 }
 
 math::Vec3f reflect(const math::Vec3f &direction, const math::Vec3f &normal)
@@ -136,19 +137,34 @@ bool scene_intersect(const math::Vec3f &origin,
   math::Vec3f &normal,
   Material &material)
 {
-  float sphere_dist = std::numeric_limits<float>::max();
+  float spheres_dist = std::numeric_limits<float>::max();
   for (const auto &sphere : spheres)
   {
     float dist_i;
-    if (sphere.ray_intersect(origin, direction, dist_i) && dist_i < sphere_dist)
+    if (sphere.ray_intersect(origin, direction, dist_i) && dist_i < spheres_dist)
     {
-      sphere_dist = dist_i;
+      spheres_dist = dist_i;
       hit = origin + direction * dist_i;
       normal = (hit - sphere.center).normalize();
       material = sphere.material;
     }
   }
-  return sphere_dist < 1000;
+  float checkerboard_dist = std::numeric_limits<float>::max();
+  if (fabs(direction.y) > 1e-3)
+  {
+    float d = -(origin.y + 4) / direction.y;
+    math::Vec3f pt     = origin + direction * d;
+    if (d > 0 && fabs(pt.x) < 10 && pt.z < -10 && pt.z > -30 && d < spheres_dist)
+    {
+      checkerboard_dist = d;
+      hit = pt;
+      normal = math::Vec3f(0.0f, 1.0f, 0.0f);
+      material.diffuse_color = (int(.5 * hit.x + 1000) + int(.5 * hit.z)) & 1 ? math::Vec3f(1, 1, 1) : math::Vec3f(1, .7, .3);
+      material.diffuse_color = material.diffuse_color * .3;
+    }
+  }
+
+  return std::min(spheres_dist, checkerboard_dist) < 1000;
 }
 
 // return color that intersects with the ray
@@ -166,8 +182,13 @@ math::Vec3f cast_ray(const math::Vec3f &origin,
   if (depth > 4 || !scene_intersect(origin, direction, spheres, point, normal, material)) return backgroundColor;
 
   Vec3f reflect_dir = reflect(direction, normal).normalize();
+  Vec3f refract_dir = refract(direction, normal, material.refractive_index).normalize();
+
   Vec3f reflect_origin = reflect_dir * normal < 0 ? point - normal * 1e-3 : point + normal * 1e-3;
+  Vec3f refract_origin = refract_dir * normal < 0 ? point - normal * 1e-3 : point + normal * 1e-3;
+
   Vec3f reflect_color = cast_ray(reflect_origin, reflect_dir, spheres, lightSources, depth + 1);
+  Vec3f refract_color = cast_ray(refract_origin, refract_dir, spheres, lightSources, depth + 1);
 
   float diffuse_light_intensity{}, specular_light_intensity{};
   for (const auto &lightSrc : lightSources)
@@ -189,7 +210,8 @@ math::Vec3f cast_ray(const math::Vec3f &origin,
       powf(std::max(0.0f, reflect(light_dir, normal) * direction), material.specular_exponent) * lightSrc.intensity;
   }
   return material.diffuse_color * diffuse_light_intensity * material.albedo[0]
-         + Vec3f(1.0f, 1.0f, 1.0f) * specular_light_intensity * material.albedo[1] + reflect_color * material.albedo[2];
+         + Vec3f(1.0f, 1.0f, 1.0f) * specular_light_intensity * material.albedo[1] + reflect_color * material.albedo[2]
+         + refract_color * material.albedo[3];
 }
 
 void render(const std::vector<Sphere> &spheres, const std::vector<LightSource> &lightSources)
@@ -230,13 +252,14 @@ int main(int argc, char *argv[])
   using namespace RayTracer;
   using namespace math;
 
-  Material ivory(Vec3f(0.4f, 0.4f, 0.3f), Vec3f(0.6f, 0.3f, 0.1f), 50.0f);
-  Material red_rubber(Vec3f(0.3f, 0.1f, 0.1f), Vec3f(0.9f, 0.1f, 0.0f), 10.0f);
-  Material mirror(Vec3f(1.0f, 1.0f, 1.0f), Vec3f(0.0f, 10.0f, 0.8f), 1425.0f);
+  Material ivory(Vec3f(0.4f, 0.4f, 0.3f), Vec4f(0.6f, 0.3f, 0.1f, 0.0f), 50.0f, 1.0f);
+  Material glass(Vec3f(0.6f, 0.7f, 0.8f), Vec4f(0.0f, 0.5f, 0.1f, 0.8f), 125.0f, 1.5f);
+  Material red_rubber(Vec3f(0.3f, 0.1f, 0.1f), Vec4f(0.9f, 0.1f, 0.0f, 0.0f), 10.0f, 1.0f);
+  Material mirror(Vec3f(1.0f, 1.0f, 1.0f), Vec4f(0.0f, 10.0f, 0.8f, 0.0f), 1425.0f, 1.0f);
 
   std::vector<Sphere> spheres;
   spheres.push_back(Sphere(Vec3f(-3, 0, -16), 2, ivory));
-  spheres.push_back(Sphere(Vec3f(-1.0, -1.5, -12), 2, mirror));
+  spheres.push_back(Sphere(Vec3f(-1.0, -1.5, -12), 2, glass));
   spheres.push_back(Sphere(Vec3f(1.5, -0.5, -18), 3, red_rubber));
   spheres.push_back(Sphere(Vec3f(7, 5, -18), 4, mirror));
 
