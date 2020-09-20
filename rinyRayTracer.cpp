@@ -10,8 +10,8 @@ namespace RayTracer
 {
 #define M_PI 3.14159265358979323846
 
-constexpr unsigned width = 1366;
-constexpr unsigned height = 768;
+constexpr unsigned width = 800;
+constexpr unsigned height = 600;
 constexpr unsigned numberOfChannels = 3;
 
 constexpr float fov = M_PI / 3.0;
@@ -39,7 +39,7 @@ void writeIntoJPG(const char *fileName,
   stbi_write_jpg(fileName, width, height, numberOfChannels, buffer.data(), 100);
 
   auto t_now = std::chrono::high_resolution_clock::now();
-  std::cout << "Time spended on -> "
+  std::cout << "Time spent on -> "
             << " Writing into a file : "
             << std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count() << '\n';
 }
@@ -225,9 +225,10 @@ void render(const std::vector<Sphere> &spheres, const std::vector<LightSource> &
   constexpr float widthF = static_cast<float>(width);
   constexpr float heightF = static_cast<float>(height);
 
-  for (size_t j = 0; j < height; ++j)
+  #pragma omp parallel for
+  for (int j = 0; j < height; ++j)
   {
-    for (size_t i = 0; i < width; ++i)
+    for (int i = 0; i < width; ++i)
     {
       float x = (2.0f * (i + 0.5) / widthF - 1.0f) * tan(fov / 2.0f) * widthF / heightF;
       float y = -(2.0f * (j + 0.5) / heightF - 1.0f) * tan(fov / 2.0f);
@@ -241,7 +242,7 @@ void render(const std::vector<Sphere> &spheres, const std::vector<LightSource> &
   writeIntoJPG("render.jpg", framebuffer, width, height, numberOfChannels);
 
   auto t_now = std::chrono::high_resolution_clock::now();
-  std::cout << "Time spended on -> "
+  std::cout << "Time spent on -> "
             << " RENDERING : " << std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count()
             << '\n';
 }
